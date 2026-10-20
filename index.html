@@ -1,169 +1,306 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unfinishable Coin Collector</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 0;
-            background-color: rgb(223, 208, 184);
-        }
-        canvas {
-            border: 2px solid black;
-            display: block;
-            margin: 20px auto;
-            border-radius: 20px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, .5);
-            backdrop-filter: blur(20px);
-            background-color:#FFF8F8;
-            
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coin Collector</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#e6d9c0; --panel:#f6eedb; --ink:#2a2418; --muted:#6d6347; --line:rgba(42,36,24,.09);
+  --player:#1f4fd8; --coin:#d9a100; --hazard:#c8372d; --btn:#2a2418; --btnink:#f6eedb;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12171a; --panel:#1b2327; --ink:#ece6d6; --muted:#9aa394; --line:rgba(236,230,214,.07);
+    --player:#6c9cff; --coin:#f2c230; --hazard:#ff6b5e; --btn:#ece6d6; --btnink:#12171a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12171a; --panel:#1b2327; --ink:#ece6d6; --muted:#9aa394; --line:rgba(236,230,214,.07);
+  --player:#6c9cff; --coin:#f2c230; --hazard:#ff6b5e; --btn:#ece6d6; --btnink:#12171a;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Chakra Petch",system-ui,sans-serif;display:flex;justify-content:center}
+main{width:min(100%,540px);padding:20px 16px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:1.9rem;font-weight:700;letter-spacing:.01em}
+.sub{margin:2px 0 0;color:var(--muted);font-size:.95rem}
+.hud{display:flex;justify-content:space-between;align-items:baseline;font-size:1.05rem}
+.hud b{font-size:1.5rem;font-variant-numeric:tabular-nums}
+.hud span{color:var(--muted)}
+.lives{letter-spacing:.2em;color:var(--hazard);font-size:1.3rem;min-width:4.5em;text-align:right}
+.timebar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.timebar i{display:block;height:100%;width:100%;background:var(--coin);transform-origin:left;transition:background .2s}
+.timebar.low i{background:var(--hazard)}
+.stage{position:relative;width:100%;aspect-ratio:1;border-radius:18px;overflow:hidden;background:var(--panel);box-shadow:0 10px 30px rgba(0,0,0,.25);border:2px solid var(--ink)}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;background:color-mix(in srgb,var(--panel) 88%,transparent)}
+.overlay[hidden]{display:none}
+.overlay h2{margin:0;font-size:2rem}
+.overlay p{margin:0;color:var(--muted);max-width:30ch}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:12px 22px;background:var(--btn);color:var(--btnink);cursor:pointer;min-height:44px}
+button.ghost{background:transparent;color:var(--ink);border:2px solid var(--ink)}
+button:focus-visible{outline:3px solid var(--player);outline-offset:3px}
+button:active{transform:translateY(1px)}
+.bar{display:flex;gap:10px;justify-content:center}
+.keys{margin:0;text-align:center;color:var(--muted);font-size:.88rem;line-height:1.5}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
 </head>
 <body>
-    <!-- The game is designed to be unfinishable, with increasing difficulty as the player collects coins. -->
-    <h1>The Coin Collector</h1>
-    <p>Collect coins, but beware the game only gets harder!</p>
-    <canvas id="gameCanvas" width="500" height="500"></canvas>
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+<main>
+  <header>
+    <h1>Coin Collector</h1>
+    <p class="sub">Every coin makes the board faster and more crowded. Last as long as you can.</p>
+  </header>
 
-        const player = { x: 240, y: 240, size: 20, color: 'blue', speed: 10 };
-        let coins = [{ x: Math.random() * 480, y: Math.random() * 480, size: 10, color: 'gold' }];
-        const obstacles = [];
+  <div class="hud" aria-live="polite">
+    <div><span>Score</span> <b id="score">0</b></div>
+    <div><span>Best</span> <b id="best">0</b></div>
+    <div class="lives" id="lives" aria-label="Lives"></div>
+  </div>
+  <div class="timebar" id="timebar"><i id="tfill"></i></div>
 
-        let score = 0;
-        let gameActive = true;
-        const restartButton = document.createElement('button');
+  <div class="stage">
+    <canvas id="game" width="500" height="500"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="otitle">Ready?</h2>
+      <p id="otext">Grab coins before the timer runs out and dodge the red blocks.</p>
+      <button id="action">Start game</button>
+    </div>
+  </div>
 
+  <div class="bar">
+    <button class="ghost" id="pause">Pause</button>
+    <button class="ghost" id="restart">Restart</button>
+  </div>
+  <p class="keys">Move with arrow keys or WASD. On a touch screen, drag anywhere on the board. Press P to pause and R to restart.</p>
+</main>
 
-        function drawScore() {
-        ctx.fillStyle = 'black';
-        ctx.font = '20px Arial';
-        ctx.fillText(`Score: ${score}`, 10, 30);
-        }
+<script>
+(() => {
+  const S = 500, PS = 22, CR = 11;
+  const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const el = { score:$('score'), best:$('best'), lives:$('lives'), tbar:$('timebar'), tfill:$('tfill'),
+    overlay:$('overlay'), otitle:$('otitle'), otext:$('otext'), action:$('action'), pause:$('pause'), restart:$('restart') };
 
-        function drawPlayer() {
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.size, player.size);
-        }
+  // Canvas sharpness on high-DPI screens
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = cv.height = S * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        function drawCoins() {
-            coins.forEach(coin => {
-                ctx.fillStyle = coin.color;
-                ctx.beginPath();
-                ctx.arc(coin.x, coin.y, coin.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        }
+  // Theme colours come from the CSS variables
+  let col = {};
+  const readColors = () => {
+    const cs = getComputedStyle(document.documentElement);
+    ['player','coin','hazard','line','ink'].forEach(k => col[k] = cs.getPropertyValue('--' + k).trim());
+  };
+  readColors();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
 
-        function drawObstacles() {
-            obstacles.forEach(obstacle => {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-            });
-        }
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('coinCollectorBest') || '0', 10) || 0; } catch (e) {}
+  el.best.textContent = best;
 
-function movePlayer(event) {
-    let newX = player.x;
-    let newY = player.y;
+  let state = 'ready', g, last = 0;
+  const keys = new Set(), touch = { x:0, y:0, id:null, ox:0, oy:0 };
+  const rand = (a, b) => a + Math.random() * (b - a);
 
-    if (event.key === 'ArrowUp' && player.y > 0) newY -= player.speed;
-    if (event.key === 'ArrowDown' && player.y + player.size < canvas.height) newY += player.speed;
-    if (event.key === 'ArrowLeft' && player.x > 0) newX -= player.speed;
-    if (event.key === 'ArrowRight' && player.x + player.size < canvas.width) newX += player.speed;
+  function reset() {
+    g = { x:S/2 - PS/2, y:S/2 - PS/2, score:0, lives:3, inv:0, time:8, maxTime:8,
+          coin:null, obs:[], parts:[], t:0 };
+    g.coin = newCoin();
+    paintHud();
+  }
 
-    if (!checkCollision(newX, newY)) {
-        player.x = newX;
-        player.y = newY;
+  function newCoin() {
+    for (let i = 0; i < 30; i++) {
+      const c = { x:rand(30, S-30), y:rand(30, S-30) };
+      const clear = g.obs.every(o => c.x < o.x - 20 || c.x > o.x + o.w + 20 || c.y < o.y - 20 || c.y > o.y + o.h + 20);
+      if (clear && Math.hypot(c.x - g.x, c.y - g.y) > 60) return c;
+    }
+    return { x:rand(30, S-30), y:rand(30, S-30) };
+  }
+
+  function spawnObstacles() {
+    const n = 1 + Math.floor(g.score / 5);
+    for (let k = 0; k < n && g.obs.length < 40; k++) {
+      for (let i = 0; i < 25; i++) {
+        const w = rand(22, 56), h = rand(22, 56), x = rand(0, S - w), y = rand(0, S - h);
+        if (Math.hypot(x + w/2 - g.x, y + h/2 - g.y) < 130) continue;
+        if (Math.hypot(x + w/2 - g.coin.x, y + h/2 - g.coin.y) < 50) continue;
+        const a = rand(0, Math.PI * 2), sp = Math.min(25 + g.score * 2, 110);
+        g.obs.push({ x, y, w, h, vx:Math.cos(a) * sp, vy:Math.sin(a) * sp });
+        break;
+      }
+    }
+  }
+
+  function burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, 6.283), s = rand(40, 150);
+      g.parts.push({ x, y, vx:Math.cos(a) * s, vy:Math.sin(a) * s, life:.5, color });
+    }
+  }
+
+  function hurt() {
+    g.lives--;
+    g.inv = 1.5;
+    g.time = g.maxTime;
+    burst(g.x + PS/2, g.y + PS/2, col.hazard, 14);
+    paintHud();
+    if (g.lives <= 0) endGame();
+  }
+
+  function paintHud() {
+    el.score.textContent = g.score;
+    el.lives.textContent = '\u2665'.repeat(Math.max(g.lives, 0));
+  }
+
+  function update(dt) {
+    g.t += dt;
+    let dx = 0, dy = 0;
+    if (keys.has('left')) dx -= 1;
+    if (keys.has('right')) dx += 1;
+    if (keys.has('up')) dy -= 1;
+    if (keys.has('down')) dy += 1;
+    dx += touch.x; dy += touch.y;
+    const m = Math.hypot(dx, dy);
+    if (m > 1) { dx /= m; dy /= m; }
+    const speed = Math.min(190 + g.score * 8, 380);
+    g.x = Math.max(0, Math.min(S - PS, g.x + dx * speed * dt));
+    g.y = Math.max(0, Math.min(S - PS, g.y + dy * speed * dt));
+
+    // coin pickup
+    if (Math.hypot(g.x + PS/2 - g.coin.x, g.y + PS/2 - g.coin.y) < PS/2 + CR) {
+      burst(g.coin.x, g.coin.y, col.coin, 12);
+      g.score++;
+      g.maxTime = Math.max(3, 8 - g.score * 0.15);
+      g.time = g.maxTime;
+      spawnObstacles();
+      g.coin = newCoin();
+      paintHud();
     }
 
-    collectCoins();
-}
-
-function checkCollision(newX, newY) {
-    return obstacles.some(obstacle => 
-        newX < obstacle.x + obstacle.width &&
-        newX + player.size > obstacle.x &&
-        newY < obstacle.y + obstacle.height &&
-        newY + player.size > obstacle.y
-    );
-}
-
-function collectCoins() {
-    coins.forEach((coin, index) => {
-        const distance = Math.sqrt(Math.pow(player.x + player.size / 2 - coin.x, 2) + Math.pow(player.y + player.size / 2 - coin.y, 2));
-        if (distance < player.size / 2 + coin.size) {
-            coins.splice(index, 1);
-            coins.push({ x: Math.random() * 480, y: Math.random() * 480, size: 10, color: 'gold' });
-            score++;
-            player.speed += 0.5; // Increase speed slightly
-            spawnObstacles();
-        }
-    });
-}
-
-
-
-        function spawnObstacles() {
-    let difficultyMultiplier = Math.ceil(score / 3);
-    for (let i = 0; i < difficultyMultiplier; i++) {
-        obstacles.push({
-            x: Math.random() * 480,
-            y: Math.random() * 480,
-            width: Math.random() * 40 + 20,
-            height: Math.random() * 40 + 20
-        });
+    // obstacles drift and bounce
+    for (const o of g.obs) {
+      o.x += o.vx * dt; o.y += o.vy * dt;
+      if (o.x < 0) { o.x = 0; o.vx = Math.abs(o.vx); }
+      if (o.x + o.w > S) { o.x = S - o.w; o.vx = -Math.abs(o.vx); }
+      if (o.y < 0) { o.y = 0; o.vy = Math.abs(o.vy); }
+      if (o.y + o.h > S) { o.y = S - o.h; o.vy = -Math.abs(o.vy); }
     }
-}
 
-        function updateObstacles() {
-            obstacles.forEach(obstacle => {
-                obstacle.y += Math.random() * 2 - 1; 
-                obstacle.x += Math.random() * 2 - 1;
-                if (obstacle.x < 0 || obstacle.x + obstacle.width > canvas.width || obstacle.y < 0 || obstacle.y + obstacle.height > canvas.height) {
-                    obstacle.x = Math.random() * 480;
-                    obstacle.y = Math.random() * 480;
-                }
-            });
-        }
-
-        function gameOver() {
-        gameActive = false;
-        ctx.fillStyle = 'black';
-        ctx.font = '30px Arial';
-        ctx.fillText(`Game Over! Score: ${score}`, 150, 250);
-        document.removeEventListener('keydown', movePlayer);
-        clearInterval(timerInterval);
-        }
-
-const timerInterval = setInterval(() => {
-    if (timeLeft > 0) {
-        timeLeft--;
-    } else {
-        gameOver();
+    // hits (player box shrunk a little to be forgiving)
+    g.inv = Math.max(0, g.inv - dt);
+    if (g.inv === 0) {
+      const p = 3;
+      if (g.obs.some(o => g.x + p < o.x + o.w && g.x + PS - p > o.x && g.y + p < o.y + o.h && g.y + PS - p > o.y)) hurt();
     }
-}, 1000);
 
+    // timer
+    g.time -= dt;
+    if (g.time <= 0 && state === 'play') hurt();
 
-function updateGame() {
-    if (!gameActive) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPlayer();
-    drawCoins();
-    drawObstacles();
-    drawScore();
-    updateObstacles();
-    requestAnimationFrame(updateGame);
-}
+    for (const p of g.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+    g.parts = g.parts.filter(p => p.life > 0);
 
-        document.addEventListener('keydown', movePlayer);
-        updateGame();
-    </script>
+    el.tfill.style.transform = `scaleX(${Math.max(g.time, 0) / g.maxTime})`;
+    el.tbar.classList.toggle('low', g.time < 2);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, S, S);
+    ctx.strokeStyle = col.line; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 50; i < S; i += 50) { ctx.moveTo(i, 0); ctx.lineTo(i, S); ctx.moveTo(0, i); ctx.lineTo(S, i); }
+    ctx.stroke();
+
+    // coin (gentle pulse)
+    const pulse = 1 + Math.sin(g.t * 6) * 0.08;
+    ctx.fillStyle = col.coin;
+    ctx.beginPath(); ctx.arc(g.coin.x, g.coin.y, CR * pulse, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2; ctx.stroke();
+
+    // hazards
+    ctx.fillStyle = col.hazard;
+    for (const o of g.obs) { ctx.beginPath(); ctx.roundRect(o.x, o.y, o.w, o.h, 6); ctx.fill(); }
+
+    // particles
+    for (const p of g.parts) { ctx.globalAlpha = Math.max(p.life * 2, 0); ctx.fillStyle = p.color; ctx.fillRect(p.x - 2, p.y - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+
+    // player (blinks while invulnerable)
+    if (g.inv === 0 || Math.floor(g.inv * 10) % 2 === 0) {
+      ctx.fillStyle = col.player;
+      ctx.beginPath(); ctx.roundRect(g.x, g.y, PS, PS, 5); ctx.fill();
+      ctx.strokeStyle = col.ink; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  function frame(t) {
+    const dt = Math.min((t - last) / 1000, 0.05);
+    last = t;
+    if (state === 'play') update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // --- State changes ---
+  function showOverlay(title, text, btn) {
+    el.otitle.textContent = title; el.otext.textContent = text; el.action.textContent = btn;
+    el.overlay.hidden = false; el.action.focus({ preventScroll:true });
+  }
+  function start() { reset(); state = 'play'; el.overlay.hidden = true; el.pause.textContent = 'Pause'; }
+  function pause() { if (state !== 'play') return; state = 'paused'; el.pause.textContent = 'Resume'; showOverlay('Paused', 'Take a breath. Your run is safe.', 'Resume'); }
+  function resume() { state = 'play'; el.overlay.hidden = true; el.pause.textContent = 'Pause'; last = performance.now(); }
+  function endGame() {
+    state = 'over';
+    const isBest = g.score > best;
+    if (isBest) { best = g.score; el.best.textContent = best; try { localStorage.setItem('coinCollectorBest', best); } catch (e) {} }
+    showOverlay('Game over', `You collected ${g.score} coin${g.score === 1 ? '' : 's'}.` + (isBest && g.score > 0 ? ' That’s a new best.' : ''), 'Play again');
+  }
+  function primary() { state === 'paused' ? resume() : start(); }
+  function togglePause() { state === 'play' ? pause() : state === 'paused' ? resume() : 0; }
+
+  el.action.addEventListener('click', primary);
+  el.pause.addEventListener('click', togglePause);
+  el.restart.addEventListener('click', () => { start(); el.restart.blur(); });
+
+  // --- Keyboard ---
+  const map = { ArrowUp:'up', w:'up', W:'up', ArrowDown:'down', s:'down', S:'down',
+                ArrowLeft:'left', a:'left', A:'left', ArrowRight:'right', d:'right', D:'right' };
+  addEventListener('keydown', e => {
+    if (map[e.key]) { keys.add(map[e.key]); e.preventDefault(); return; }
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
+    else if (e.key === 'r' || e.key === 'R') start();
+    else if ((e.key === 'Enter' || e.key === ' ') && state !== 'play' && document.activeElement.tagName !== 'BUTTON') { e.preventDefault(); primary(); }
+  });
+  addEventListener('keyup', e => { if (map[e.key]) keys.delete(map[e.key]); });
+  addEventListener('blur', () => { keys.clear(); pause(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  // --- Touch drag (acts as a floating joystick) ---
+  cv.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY;
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (e.pointerId !== touch.id) return;
+    touch.x = Math.max(-1, Math.min(1, (e.clientX - touch.ox) / 40));
+    touch.y = Math.max(-1, Math.min(1, (e.clientY - touch.oy) / 40));
+  });
+  const endTouch = e => { if (e.pointerId === touch.id) { touch.id = null; touch.x = touch.y = 0; } };
+  cv.addEventListener('pointerup', endTouch);
+  cv.addEventListener('pointercancel', endTouch);
+
+  reset();
+  requestAnimationFrame(t => { last = t; frame(t); });
+})();
+</script>
 </body>
 </html>
